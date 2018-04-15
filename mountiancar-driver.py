@@ -1,8 +1,14 @@
+# try to play acrobat game from openai gym
+# there are three possible actions
+# there are six observations
+
+import gym
 import tensorflow as tf
 import numpy as np
-import gym
 
-print('finished imports')
+print("finished imports")
+
+# HELPER FUNCTIONS
 
 def helper_discount_rewards(rewards, discount_rate):
     # takes in a list of rewards and applies the discount rate
@@ -25,36 +31,50 @@ def discount_and_normalize_rewards(all_rewards, discount_rate):
     reward_std = flat_rewards.std()
     return [(discounted_rewards - reward_mean)/reward_std for discounted_rewards in all_discounted_rewards]
 
-# cartpole gives us 4 data points when env.reset() called
+# CONSTANTS
+
 num_inputs = 2
-# number of hidden neurons
-num_hidden = 4
-# only want 1 output (1 or 0, left or right)
-num_outputs = 1
+num_outputs = 3
+# play with this no idea what is good here:
+num_hidden = 3
 
 learning_rate = 0.1
 
+num_game_rounds = 10
+max_game_steps = 200
+num_iterations = 2500
+# play with this
+# determines how much the program discounts rewards from actions that
+# occur after a certian action
+# for example, w/0.9 future action rewards are reduced by *0.9
+discount_rate = 0.8
+
+# BUILDING MODEL
+
+X = tf.placeholder(tf.float32, shape=[None, num_inputs])
+actf = tf.nn.relu
+
 initalizer = tf.contrib.layers.variance_scaling_initializer()
 
-X = tf.placeholder(tf.float32,shape=[None, num_inputs])
+# concider playing with additional neurons/ layers later
+hidden_layer_1 = tf.layers.dense(
+                X,
+                num_hidden,
+                activation=actf,
+                kernel_initializer=initalizer)
 
-hidden_layer_1 = tf.layers.dense(X,num_hidden,activation=tf.nn.elu,kernel_initializer=initalizer)
+logits = tf.layers.dense(
+        hidden_layer_1,
+        num_outputs)
 
-# logits are final most pure form of output before we squish down with sigmoid
-logits = tf.layers.dense(hidden_layer_1,num_outputs)
-# squish all the outputs into one output
+# apply activation function
 outputs = tf.nn.sigmoid(logits)
 
-# 1-prob of left move == prob of right move
-probs = tf.concat(axis=1,values=[outputs,1-outputs])
 # slightly randomly select an action based on the probabilties
-action = tf.multinomial(probs,num_samples=1)
-
-# convert action from tensor to float32
-y = 1.0 - tf.to_float(action)
+action = tf.multinomial(outputs,num_samples=1)
 
 # tensorflow doing some calculus:
-cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=logits)
+cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=outputs, logits=logits)
 optimizer = tf.train.AdamOptimizer(learning_rate)
 
 # returns a list of the gradients and vars
@@ -80,15 +100,6 @@ saver = tf.train.Saver()
 
 # make enviroment
 env = gym.make('MountainCar-v0')
-
-num_game_rounds = 10
-max_game_steps = 1000
-num_iterations = 1500
-# play with this
-# determines how much the program discounts rewards from actions that
-# occur after a certian action
-# for example, w/0.9 future action rewards are reduced by *0.9
-discount_rate = 0.7
 
 print("starting session")
 
@@ -121,6 +132,7 @@ with tf.Session() as sess:
 
 
                 if done:
+                    # print("game {}\tplayed {} steps, done".format(game,step))
                     break
 
             all_rewards.append(current_rewards)
